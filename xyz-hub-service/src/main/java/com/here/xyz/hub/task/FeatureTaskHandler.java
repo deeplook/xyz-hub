@@ -184,6 +184,7 @@ public class FeatureTaskHandler {
         setAdditionalEventProps(task, task.storage, eventToExecute);
         final long storageRequestStart = Service.currentTimeMillis();
         responseContext.rpcContext = RpcClient.getInstanceFor(task.storage).execute(task.getMarker(), eventToExecute, storageResult -> {
+          if (task.getState().isFinal()) return;
           addStoragePerformanceInfo(task, Service.currentTimeMillis() - storageRequestStart, responseContext.rpcContext);
           if (storageResult.failed()) {
             handleFailure(task.getMarker(), storageResult.cause(), callback);
@@ -194,6 +195,7 @@ public class FeatureTaskHandler {
 
           //Do the post-processing here before sending back the response and notifying response-listeners
           notifyProcessors(task, eventType, response, postProcessingResult -> {
+            if (task.getState().isFinal()) return;
             if (postProcessingResult.failed() || postProcessingResult.result() instanceof ErrorResponse) {
               handleProcessorFailure(task.getMarker(), postProcessingResult, callback);
               return;
@@ -207,6 +209,7 @@ public class FeatureTaskHandler {
             notifyListeners(task, eventType, responseToSend);
           });
         });
+        task.addCancellingHandler(unused -> responseContext.rpcContext.cancelRequest());
       }
       catch (IllegalStateException e) {
         cancelRPC(responseContext.rpcContext);
@@ -432,7 +435,8 @@ public class FeatureTaskHandler {
       RpcClient client;
       try {
         client = RpcClient.getInstanceFor(l.resolvedConnector);
-      } catch (Exception e) {
+      }
+      catch (Exception e) {
         logger.warn(task.getMarker(), "Error when trying to get client for remote function (listener) {}.", l.getId(), e);
         return;
       }
@@ -461,6 +465,7 @@ public class FeatureTaskHandler {
           })
           //Execute the processor with the result of the previous processor and inform following stages about the outcome
           .thenAccept(result -> {
+            if (task.getState().isFinal()) return;
             if (result == null) {
               return; //Happens in case of exception. Then the exceptionally handler already took over to inform the following stages.
             }
@@ -471,7 +476,8 @@ public class FeatureTaskHandler {
               //Handle well-thrown connector error by bubbling it through all stages till the end
               nextFuture.complete(result);
               return;
-            } else if (result instanceof ModifiedEventResponse) {
+            }
+            else if (result instanceof ModifiedEventResponse) {
               payloadToSend = ((ModifiedEventResponse) result).getEvent();
               // CMEKB-2779 Store ModificationFailures outside of the event
               if (payloadToSend instanceof ModifyFeaturesEvent) {
@@ -481,7 +487,8 @@ public class FeatureTaskHandler {
                   modifyFeaturesEvent.setFailed(null);
                 }
               }
-            } else {
+            }
+            else {
               payloadToSend = ((ModifiedResponseResponse) result).getResponse();
             }
 
@@ -536,13 +543,14 @@ public class FeatureTaskHandler {
       return f;
     }
     //Execute the processor with the event / response payload (do pre-processing / post-processing)
-    client.execute(task.getMarker(), createNotification(task, payload, notificationEventType, p), ar -> {
+    RpcContext rpcContext = client.execute(task.getMarker(), createNotification(task, payload, notificationEventType, p), ar -> {
       if (ar.failed()) {
         f.completeExceptionally(ar.cause());
       } else {
         f.complete(ar.result());
       }
     });
+    task.addCancellingHandler(unused -> rpcContext.cancelRequest());
     return f;
   }
 
