@@ -1,6 +1,8 @@
 ![XYZ Hub](xyz.svg)
 ---
 
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/deeplook/xyz-hub/master?urlpath=lab)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Build Status](https://travis-ci.com/heremaps/xyz-hub.svg?branch=master)](https://travis-ci.com/heremaps/xyz-hub)
 
