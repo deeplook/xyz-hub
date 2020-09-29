@@ -1,3 +1,3 @@
 conda update -n base conda
-
+jupyter labextension install @jupyterlab/server-proxy
 mvn clean install
